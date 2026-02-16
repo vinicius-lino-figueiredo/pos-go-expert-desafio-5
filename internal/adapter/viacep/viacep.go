@@ -9,6 +9,7 @@ import (
 	"net/url"
 
 	"github.com/vinicius-lino-figueiredo/pos-go-expert-desafio-4/domain"
+	"go.opentelemetry.io/otel"
 )
 
 const baseURL = "http://viacep.com.br/ws/"
@@ -35,6 +36,9 @@ func NewAddressGetter(cl *http.Client) domain.AddressGetter {
 
 // GetAddress implements [domain.AddressGetter].
 func (a *ViaCEP) GetAddress(ctx context.Context, postalCode string) (string, error) {
+	ctx, span := otel.Tracer("service-b").Start(ctx, "get-address")
+	defer span.End()
+
 	u, err := a.getURL(postalCode)
 	if err != nil {
 		return "", fmt.Errorf("mounting url: %w", err)

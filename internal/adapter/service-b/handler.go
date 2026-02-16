@@ -7,6 +7,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/vinicius-lino-figueiredo/pos-go-expert-desafio-4/domain"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
 )
 
 // Handler TODO
@@ -29,19 +31,25 @@ func NewHandler(ag domain.AddressGetter, tg domain.TemperatureGetter) http.Handl
 
 // GetTemperature TODO
 func (h *Handler) GetTemperature(ctx *gin.Context) {
+	propagator := otel.GetTextMapPropagator()
+	reqCtx := propagator.Extract(ctx.Request.Context(), propagation.HeaderCarrier(ctx.Request.Header))
+
+	reqCtx, span := otel.Tracer("service-b").Start(reqCtx, "handle-temperature")
+	defer span.End()
+
 	postalCode, err := h.getPostalCode(ctx)
 	if err != nil {
 		_ = ctx.Error(err)
 		return
 	}
 
-	location, err := h.ag.GetAddress(ctx, postalCode)
+	location, err := h.ag.GetAddress(reqCtx, postalCode)
 	if err != nil {
 		_ = ctx.Error(err)
 		return
 	}
 
-	c, err := h.tg.GetTemperature(ctx, location)
+	c, err := h.tg.GetTemperature(reqCtx, location)
 	if err != nil {
 		_ = ctx.Error(err)
 		return

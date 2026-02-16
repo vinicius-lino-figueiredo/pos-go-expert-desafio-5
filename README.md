@@ -66,3 +66,20 @@ Entrega:
  -Documentação explicando como rodar o projeto em ambiente dev.
  -Utilize docker/docker-compose para que possamos realizar os testes de sua
  aplicação.
+
+---
+
+Para rodar em ambiente de DEV, inicie a aplicação:
+
+```bash
+docker compose up --build -d
+```
+
+Em seguida faça uma requisição de POST para a porta :8000. O payload deve ser
+como mostrado nas instruções do desafio.
+
+```json
+{"cep": "12345678"}
+```
+
+O endpoint do zipkin pode ser encontrado em: <http://localhost:9411/zipkin>

@@ -11,6 +11,7 @@ import (
 	"strconv"
 
 	"github.com/vinicius-lino-figueiredo/pos-go-expert-desafio-4/domain"
+	"go.opentelemetry.io/otel"
 )
 
 const baseURL = "https://wttr.in/"
@@ -40,6 +41,9 @@ func NewTemperatureGetter(cl *http.Client) domain.TemperatureGetter {
 
 // GetTemperature implements [domain.TemperatureGetter].
 func (w *Wttr) GetTemperature(ctx context.Context, location string) (float64, error) {
+	ctx, span := otel.Tracer("service-b").Start(ctx, "get-temperature")
+	defer span.End()
+
 	u, err := w.getURL(location)
 	if err != nil {
 		return 0, fmt.Errorf("mounting url: %w", err)

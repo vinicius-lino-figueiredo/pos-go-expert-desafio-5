@@ -9,17 +9,24 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/vinicius-lino-figueiredo/pos-go-expert-desafio-4/domain"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel"
 )
 
 // Handler TODO
 type Handler struct {
 	*gin.Engine
 	serviceBURL string
+	client      *http.Client
 }
 
 // NewHandler TODO
 func NewHandler(serviceBURL string) http.Handler {
-	h := &Handler{Engine: gin.New(), serviceBURL: serviceBURL}
+	h := &Handler{
+		Engine:      gin.New(),
+		serviceBURL: serviceBURL,
+		client:      &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)},
+	}
 
 	h.Use(h.errorMiddleware)
 
@@ -30,6 +37,9 @@ func NewHandler(serviceBURL string) http.Handler {
 
 // GetTemperature TODO
 func (h *Handler) GetTemperature(ctx *gin.Context) {
+	reqCtx, span := otel.Tracer("service-a").Start(ctx.Request.Context(), "forward-to-service-b")
+	defer span.End()
+
 	postalCode, err := h.getPostalCode(ctx)
 	if err != nil {
 		_ = ctx.Error(err)
@@ -44,13 +54,13 @@ func (h *Handler) GetTemperature(ctx *gin.Context) {
 		return
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, h.serviceBURL, w)
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, h.serviceBURL, w)
 	if err != nil {
 		ctx.Error(err)
 		return
 	}
 
-	res, err := http.DefaultClient.Do(req)
+	res, err := h.client.Do(req)
 	if err != nil {
 		ctx.Error(err)
 		return

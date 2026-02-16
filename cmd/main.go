@@ -6,14 +6,21 @@ import (
 	"crypto/tls"
 	"log"
 	"net/http"
+	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
 	servicea "github.com/vinicius-lino-figueiredo/pos-go-expert-desafio-4/internal/adapter/service-a"
-	"github.com/vinicius-lino-figueiredo/pos-go-expert-desafio-4/internal/adapter/service-b"
+	serviceb "github.com/vinicius-lino-figueiredo/pos-go-expert-desafio-4/internal/adapter/service-b"
 	"github.com/vinicius-lino-figueiredo/pos-go-expert-desafio-4/internal/adapter/viacep"
 	"github.com/vinicius-lino-figueiredo/pos-go-expert-desafio-4/internal/adapter/wttr"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/sdk/resource"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.21.0"
 )
 
 const (
@@ -21,15 +28,59 @@ const (
 	addrB = ":8080"
 )
 
-func main() {
-	ag := viacep.NewAddressGetter(http.DefaultClient)
-	tg := wttr.NewTemperatureGetter(http.DefaultClient)
+func initTracer(ctx context.Context) (*sdktrace.TracerProvider, error) {
+	collectorURL := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+	if collectorURL == "" {
+		collectorURL = "http://localhost:4318"
+	}
 
+	exporter, err := otlptracehttp.New(ctx,
+		otlptracehttp.WithEndpointURL(collectorURL),
+		otlptracehttp.WithInsecure(),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := resource.New(ctx,
+		resource.WithAttributes(
+			semconv.ServiceName("weather-service"),
+		),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	tp := sdktrace.NewTracerProvider(
+		sdktrace.WithBatcher(exporter),
+		sdktrace.WithResource(res),
+	)
+
+	otel.SetTracerProvider(tp)
+	otel.SetTextMapPropagator(propagation.TraceContext{})
+
+	return tp, nil
+}
+
+func main() {
 	http.DefaultClient.Transport = &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}
 
+	ag := viacep.NewAddressGetter(http.DefaultClient)
+	tg := wttr.NewTemperatureGetter(http.DefaultClient)
+
 	ctx, cancel := context.WithCancelCause(context.Background())
+
+	tp, err := initTracer(ctx)
+	if err != nil {
+		log.Fatal("failed to initialize tracer:", err)
+	}
+	defer func() {
+		if err := tp.Shutdown(ctx); err != nil {
+			log.Println("tracer shutdown error:", err)
+		}
+	}()
 
 	hA := servicea.NewHandler("http://localhost:8080/temperature")
 
@@ -67,5 +118,4 @@ func main() {
 	}
 
 	log.Println(context.Cause(ctx))
-
 }

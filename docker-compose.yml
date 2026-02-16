@@ -2,3 +2,15 @@ services:
   app:
     build: .
     network_mode: host
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    network_mode: host
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml
+
+  zipkin:
+    image: openzipkin/zipkin:latest
+    network_mode: host
