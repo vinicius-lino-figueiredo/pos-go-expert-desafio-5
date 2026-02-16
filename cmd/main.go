@@ -8,13 +8,18 @@ import (
 	"net/http"
 	"os/signal"
 	"syscall"
+	"time"
 
-	"github.com/vinicius-lino-figueiredo/pos-go-expert-desafio-4/internal/adapter/handler"
+	servicea "github.com/vinicius-lino-figueiredo/pos-go-expert-desafio-4/internal/adapter/service-a"
+	"github.com/vinicius-lino-figueiredo/pos-go-expert-desafio-4/internal/adapter/service-b"
 	"github.com/vinicius-lino-figueiredo/pos-go-expert-desafio-4/internal/adapter/viacep"
 	"github.com/vinicius-lino-figueiredo/pos-go-expert-desafio-4/internal/adapter/wttr"
 )
 
-const addr = ":8000"
+const (
+	addrA = ":8000"
+	addrB = ":8080"
+)
 
 func main() {
 	ag := viacep.NewAddressGetter(http.DefaultClient)
@@ -24,22 +29,42 @@ func main() {
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}
 
-	hr := handler.NewHandler(ag, tg)
-
 	ctx, cancel := context.WithCancelCause(context.Background())
 
-	server := http.Server{Addr: addr, Handler: hr}
+	hA := servicea.NewHandler("http://localhost:8080/temperature")
+
+	hB := serviceb.NewHandler(ag, tg)
+
+	serverA := http.Server{Addr: addrA, Handler: hA}
+
+	serverB := http.Server{Addr: addrB, Handler: hB}
 
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT)
 	defer stop()
 
 	go func() {
-		if err := server.ListenAndServe(); err != nil {
+		if err := serverA.ListenAndServe(); err != nil {
+			cancel(err)
+		}
+	}()
+
+	go func() {
+		if err := serverB.ListenAndServe(); err != nil {
 			cancel(err)
 		}
 	}()
 
 	<-ctx.Done()
+
+	shDCtx, cnclShD := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	defer cnclShD()
+
+	if err := serverA.Shutdown(shDCtx); err != nil {
+		log.Println("server A shutdown error:", err.Error())
+	}
+	if err := serverB.Shutdown(shDCtx); err != nil {
+		log.Println("server B shutdown error:", err.Error())
+	}
 
 	log.Println(context.Cause(ctx))
 

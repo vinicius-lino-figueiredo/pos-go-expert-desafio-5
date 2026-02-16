@@ -1,4 +1,4 @@
-package handler_test
+package serviceb_test
 
 import (
 	"context"
@@ -6,10 +6,11 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
-	"github.com/vinicius-lino-figueiredo/pos-go-expert-desafio-4/internal/adapter/handler"
+	serviceb "github.com/vinicius-lino-figueiredo/pos-go-expert-desafio-4/internal/adapter/service-b"
 )
 
 type mockAddressGetter struct {
@@ -39,30 +40,30 @@ func TestHandlerSuite(t *testing.T) {
 }
 
 func (s *HandlerSuite) TestInvalidPostalCodeTooShort() {
-	h := handler.NewHandler(&mockAddressGetter{}, &mockTemperatureGetter{})
+	h := serviceb.NewHandler(&mockAddressGetter{}, &mockTemperatureGetter{})
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/temperature/123", nil)
+	req := httptest.NewRequest(http.MethodPost, "/temperature", strings.NewReader(`{"cep":"123"}`))
 
 	h.ServeHTTP(rec, req)
 
-	s.Equal(http.StatusBadRequest, rec.Code)
+	s.Equal(http.StatusUnprocessableEntity, rec.Code)
 }
 
-func (s *HandlerSuite) TestInvalidPostalCodeNonNumeric() {
-	h := handler.NewHandler(&mockAddressGetter{}, &mockTemperatureGetter{})
+func (s *HandlerSuite) TestInvalidPostalCodeEmpty() {
+	h := serviceb.NewHandler(&mockAddressGetter{}, &mockTemperatureGetter{})
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/temperature/abcdefgh", nil)
+	req := httptest.NewRequest(http.MethodPost, "/temperature", strings.NewReader(`{"cep":""}`))
 
 	h.ServeHTTP(rec, req)
 
-	s.Equal(http.StatusBadRequest, rec.Code)
+	s.Equal(http.StatusUnprocessableEntity, rec.Code)
 }
 
 func (s *HandlerSuite) TestAddressGetterError() {
 	ag := &mockAddressGetter{err: errors.New("not found")}
-	h := handler.NewHandler(ag, &mockTemperatureGetter{})
+	h := serviceb.NewHandler(ag, &mockTemperatureGetter{})
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/temperature/01001000", nil)
+	req := httptest.NewRequest(http.MethodPost, "/temperature", strings.NewReader(`{"cep":"01001000"}`))
 
 	h.ServeHTTP(rec, req)
 
@@ -72,9 +73,9 @@ func (s *HandlerSuite) TestAddressGetterError() {
 func (s *HandlerSuite) TestTemperatureGetterError() {
 	ag := &mockAddressGetter{address: "São Paulo"}
 	tg := &mockTemperatureGetter{err: errors.New("service unavailable")}
-	h := handler.NewHandler(ag, tg)
+	h := serviceb.NewHandler(ag, tg)
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/temperature/01001000", nil)
+	req := httptest.NewRequest(http.MethodPost, "/temperature", strings.NewReader(`{"cep":"01001000"}`))
 
 	h.ServeHTTP(rec, req)
 
@@ -84,15 +85,15 @@ func (s *HandlerSuite) TestTemperatureGetterError() {
 func (s *HandlerSuite) TestSuccessfulResponse() {
 	ag := &mockAddressGetter{address: "São Paulo"}
 	tg := &mockTemperatureGetter{temp: 25.0}
-	h := handler.NewHandler(ag, tg)
+	h := serviceb.NewHandler(ag, tg)
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/temperature/01001000", nil)
+	req := httptest.NewRequest(http.MethodPost, "/temperature", strings.NewReader(`{"cep":"01001000"}`))
 
 	h.ServeHTTP(rec, req)
 
 	s.Equal(http.StatusOK, rec.Code)
 
-	var resp handler.Response
+	var resp serviceb.Response
 	err := json.NewDecoder(rec.Body).Decode(&resp)
 	s.NoError(err)
 	s.Equal(25.0, resp.TempC)

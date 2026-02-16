@@ -61,6 +61,10 @@ func (a *ViaCEP) GetAddress(ctx context.Context, postalCode string) (string, err
 		return "", fmt.Errorf("decoding response: %w", err)
 	}
 
+	if body.Erro != "" {
+		return "", domain.ErrPostalCodeNotFound
+	}
+
 	return body.Localidade, nil
 }
 
@@ -69,6 +73,7 @@ func (a *ViaCEP) getURL(postalCode string) (string, error) {
 }
 
 type viaCEP struct {
+	Erro        string `json:"erro"`
 	Cep         string `json:"cep"`
 	Logradouro  string `json:"logradouro"`
 	Complemento string `json:"complemento"`

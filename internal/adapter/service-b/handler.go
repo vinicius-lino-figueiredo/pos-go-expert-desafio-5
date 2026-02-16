@@ -1,14 +1,11 @@
-// Package handler TODO
-package handler
+// Package serviceb TODO
+package serviceb
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
-	"regexp"
 
 	"github.com/gin-gonic/gin"
-	"github.com/go-ozzo/ozzo-validation/v4"
 	"github.com/vinicius-lino-figueiredo/pos-go-expert-desafio-4/domain"
 )
 
@@ -25,7 +22,7 @@ func NewHandler(ag domain.AddressGetter, tg domain.TemperatureGetter) http.Handl
 
 	h.Use(h.errorMiddleware)
 
-	h.GET("/temperature/:postalCode", h.GetTemperature)
+	h.POST("/temperature", h.GetTemperature)
 
 	return h
 }
@@ -53,20 +50,21 @@ func (h *Handler) GetTemperature(ctx *gin.Context) {
 	f := c*1.8 + 32
 	k := c + 273
 
-	ctx.JSON(http.StatusOK, Response{TempC: c, TempF: f, TempK: k})
+	ctx.JSON(http.StatusOK, Response{City: location, TempC: c, TempF: f, TempK: k})
 }
 
 func (h *Handler) getPostalCode(ctx *gin.Context) (string, error) {
-	postalCode := ctx.Param("postalCode")
-	err := validation.Validate(postalCode,
-		validation.Required,
-		validation.Length(8, 8),
-		validation.Match(regexp.MustCompile(`^\d+$`)),
-	)
-	if err != nil {
-		return "", fmt.Errorf("validating postal code: %w", err)
+	var body map[string]any
+	if err := ctx.BindJSON(&body); err != nil {
+		return "", domain.ErrInvalidZipCode
 	}
-	return postalCode, nil
+
+	cep, _ := body["cep"].(string)
+	if len(cep) != 8 {
+		return "", domain.ErrInvalidZipCode
+	}
+
+	return cep, nil
 }
 
 func (h *Handler) errorMiddleware(ctx *gin.Context) {
@@ -81,8 +79,10 @@ func (h *Handler) errorMiddleware(ctx *gin.Context) {
 
 	var statusCode int
 	switch {
-	case errors.As(err, &validation.ErrorObject{}):
-		statusCode = http.StatusBadRequest
+	case errors.Is(err, domain.ErrPostalCodeNotFound):
+		statusCode = http.StatusNotFound
+	case errors.Is(err, domain.ErrInvalidZipCode):
+		statusCode = http.StatusUnprocessableEntity
 	default:
 		statusCode = http.StatusInternalServerError
 	}
@@ -92,6 +92,7 @@ func (h *Handler) errorMiddleware(ctx *gin.Context) {
 
 // Response TODO
 type Response struct {
+	City  string  `json:"city"`
 	TempC float64 `json:"temp_C"`
 	TempF float64 `json:"temp_F"`
 	TempK float64 `json:"temp_K"`

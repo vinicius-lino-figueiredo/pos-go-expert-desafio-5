@@ -7,8 +7,10 @@ import (
 )
 
 var (
+	// ErrInvalidZipCode TODO
+	ErrInvalidZipCode = errors.New("invalid zipcode")
 	// ErrPostalCodeNotFound TODO
-	ErrPostalCodeNotFound = errors.New("postal code not found")
+	ErrPostalCodeNotFound = errors.New("can not find zipcode")
 )
 
 // AddressGetter TODO
